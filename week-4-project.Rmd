@@ -1,0 +1,129 @@
+---
+title: "Week 4 Assignment"
+author: LinJie Yang
+output: html_document
+---
+
+## Introduction##
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: [http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har] (see the section on the Weight Lifting Exercise Dataset).
+
+## Loading the dataset##
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(RGtk2)
+library(rattle)
+library(randomForest)
+library(gbm)
+```
+
+```{r}
+train_url<-"http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test_url<-"http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+init_org_training_data<-read.csv(url(train_url))
+init_org_testing_data<-read.csv(url(test_url))
+```
+
+```{r}
+dim(init_org_training_data)
+```
+
+##2. Data Cleaning##
+**Removing Variables which have nearly zero variance**
+```{r}
+non_zero_var<-nearZeroVar(init_org_training_data)
+org_training_data<-init_org_training_data[,-non_zero_var]
+org_testing_data<-init_org_testing_data[,-non_zero_var]
+```
+
+**Removing Variables which have NAs,Our threshhold is 95 percent**
+```{r}
+na_val_col<-sapply(org_training_data,function(x)mean(is.na(x)))>0.95
+org_training_data<-org_training_data[,na_val_col==FALSE]
+org_testing_data<-org_testing_data[,na_val_col==FALSE]
+```
+
+**Removing variables which are non-numeric and hence will not contribue to our model. The first 7 variables are of that kind,thus those need to be removed from the datasets.**
+```{r}
+org_training_data<-org_training_data[,8:59]
+org_testing_data<-org_testing_data[,8:59]
+```
+
+##Data Partitioning##
+We will seggregate our org_training_data into 2 different parts,one is the training set(60 percent of the total data) and test set(40 percent of the total data)
+```{r}
+inTrain<-createDataPartition(org_training_data$classe,p=0.6,list=FALSE)
+training<-org_training_data[inTrain,]
+testing<-org_training_data[-inTrain,]
+```
+
+##Decision Tree Model##
+```{r}
+DT_modfit<-train(classe~.,data=training,method='rpart')
+```
+
+Prediction in terms of the Decision Tree Model
+```{r}
+DT_prediction<-predict(DT_modfit,testing)
+confusionMatrix(DT_prediction,testing$classe)
+```
+```{r}
+rpart.plot(DT_modfit$finalModel,roundint=FALSE)
+```
+
+The prediction accuracy is 50 percent which not upto the desired level.
+
+##Random Forest Model##
+```{r}
+RF_modfit<-train(classe~.,data=training,method='rf',ntree=100)
+```
+Prediction in terms of Random Forest Model
+```{r}
+RF_prediction<-predict(RF_modfit,testing)
+RF_pred_conf<-confusionMatrix(RF_prediction,testing$classe)
+RF_pred_conf
+```
+
+```{r}
+plot(RF_pred_conf$table,col=RF_pred_conf$byClass,main=paste("Random Foreest-Accuracy Level =",round(RF_pred_conf$overall['Accuracy'],4)))
+```
+According to the Confusion Matrix, we can see that the prediction accuracy of Randorm Forest model is 99 percent.
+
+##Gradient Boosting Model##
+```{r}
+GBM_modfit<-train(classe~.,data=training,method='gbm',verbose=FALSE)
+GBM_modfit$finalModel
+```
+```{r}
+GBM_prediction<-predict(GBM_modfit,testing)
+GBM_pred_conf<-confusionMatrix(GBM_prediction,testing$classe)
+GBM_pred_conf
+```
+```{r}
+plot(GBM_pred_conf$table,col=GBM_pred_conf$byClass,main=paste("Gradient Boosting-Accuracy Level=",round(GBM_pred_conf$overall['Accuracy'],4)))
+```
+
+From Gradient Boos Model, the predicition accuracy is 95 percent.
+
+##We need to see how each model has predicted the validation dataset across the classifications.##
+We do not consider Decision Tree model as it didn't reach the satisfactory prediction accuracy level. Only Random Forest and Gradient Boosting methods are being compared.
+
+```{r}
+RF_pred_conf$overall
+```
+
+```{r}
+GBM_pred_conf$overall
+```
+##Conclusion##
+After checking the Overall Statistics data, the Random Forest model has defintely more accuracy than GBM. Hence we will be selecting Random Forest model for final predicvtion from org_testing_data.
+
+##Final Prediction-Applying selected moedl on the Test Data##
+```{r}
+Final_RF_prediction<-predict(RF_modfit,org_testing_data)
+Final_RF_prediction
+```
+
